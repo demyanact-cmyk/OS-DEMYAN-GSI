@@ -1,0 +1,55 @@
+name: Build OS•DEMYAN GSI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-gsi:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y e2fsprogs android-sdk-libsparse-utils python3
+
+    - name: Download Android 17 Donor GSI
+      run: |
+        wget -q https://google.com -O donor.zip
+        unzip donor.zip -d donor_files
+        simg2img donor_files/system.img system.raw.img
+
+    - name: Extract System Image Files
+      run: |
+        git clone https://github.com
+        python3 imgextractor/imgextractor.py system.raw.img output_folder
+
+    - name: Inject OS•DEMYAN DNA
+      run: |
+        sed -i 's/ro.build.display.id=.*/ro.build.display.id=OS•DEMYAN v1.0/g' output_folder/system/build.prop
+        echo "ro.surface_flinger.supports_background_blur=1" >> output_folder/system/build.prop
+        echo "ro.sf.blurs_are_expensive=0" >> output_folder/system/build.prop
+        
+        if [ -f "DemyanLauncher.apk" ]; then
+          mkdir -p output_folder/system/priv-app/DemyanLauncher
+          cp DemyanLauncher.apk output_folder/system/priv-app/DemyanLauncher/
+        fi
+        
+        if [ -f "bootanimation.zip" ]; then
+          cp bootanimation.zip output_folder/system/media/
+        fi
+
+    - name: Pack OS•DEMYAN GSI
+      run: |
+        mke2fs -t ext4 -b 4096 -I 256 -O ^has_journal -M /system -d output_folder system_modified.raw.img
+        img2simg system_modified.raw.img system_os_demyan.img
+
+    - name: Upload Finished GSI Image
+      uses: actions/upload-artifact@v4
+      with:
+        name: OS-DEMYAN-Android17-GSI
+        path: system_os_demyan.img
+        compression-level: 6

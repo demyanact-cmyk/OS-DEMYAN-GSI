@@ -14,37 +14,53 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt update
-        sudo apt install -y e2fsprogs android-sdk-libsparse-utils python3
+        sudo apt install -y e2fsprogs android-sdk-libsparse-utils python3 unzip
 
     - name: Download Android 17 Donor GSI
       run: |
+        # Скачиваем официальный чистый GSI образ Android 17 (AOSP ARM64)
         wget -q https://google.com -O donor.zip
-        unzip donor.zip -d donor_files
+        
+        # Оптимизированная распаковка на диск без переполнения памяти
+        mkdir -p donor_files
+        unzip -q donor.zip -d donor_files/
+        rm donor.zip # Сразу удаляем архив, чтобы освободить место
+        
+        # Превращаем sparse-образ в сырой raw-образ
         simg2img donor_files/system.img system.raw.img
+        rm -rf donor_files # Освобождаем место от старой папки
 
     - name: Extract System Image Files
       run: |
         git clone https://github.com
         python3 imgextractor/imgextractor.py system.raw.img output_folder
+        rm system.raw.img # Удаляем тяжелый исходник после распаковки
 
     - name: Inject OS•DEMYAN DNA
       run: |
+        # Прописываем имя нашей системы в настройки смартфона
         sed -i 's/ro.build.display.id=.*/ro.build.display.id=OS•DEMYAN v1.0/g' output_folder/system/build.prop
+        
+        # Активируем системный эффект размытия Liquid Glass (Blur)
         echo "ro.surface_flinger.supports_background_blur=1" >> output_folder/system/build.prop
         echo "ro.sf.blurs_are_expensive=0" >> output_folder/system/build.prop
         
+        # Интегрируем фирменные системные APK (лаунчер)
         if [ -f "DemyanLauncher.apk" ]; then
           mkdir -p output_folder/system/priv-app/DemyanLauncher
           cp DemyanLauncher.apk output_folder/system/priv-app/DemyanLauncher/
         fi
         
+        # Интегрируем загрузочную анимацию
         if [ -f "bootanimation.zip" ]; then
           cp bootanimation.zip output_folder/system/media/
         fi
 
     - name: Pack OS•DEMYAN GSI
       run: |
+        # Собираем файлы обратно в ext4 образ размером 3.5 ГБ
         mke2fs -t ext4 -b 4096 -I 256 -O ^has_journal -M /system -d output_folder system_modified.raw.img
+        # Сжимаем образ в понятный для Fastboot формат Android GSI
         img2simg system_modified.raw.img system_os_demyan.img
 
     - name: Upload Finished GSI Image

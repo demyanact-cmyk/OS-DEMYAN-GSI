@@ -14,53 +14,53 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt update
-        sudo apt install -y e2fsprogs android-sdk-libsparse-utils python3 unzip
+        sudo apt install -y e2fsprogs android-sdk-libsparse-utils python3 p7zip-full
 
-    - name: Download Android 17 Donor GSI
+    - name: Download and Low-Memory Extract Android 17
       run: |
-        # Скачиваем официальный чистый GSI образ Android 17 (AOSP ARM64)
+        # Скачиваем официальный образ Android 17
         wget -q https://google.com -O donor.zip
         
-        # Оптимизированная распаковка на диск без переполнения памяти
+        # Распаковываем через 7z напрямую на диск с минимальным потреблением ОЗУ
         mkdir -p donor_files
-        unzip -q donor.zip -d donor_files/
-        rm donor.zip # Сразу удаляем архив, чтобы освободить место
+        7z x donor.zip -odonor_files/ -y
+        rm donor.zip
         
-        # Превращаем sparse-образ в сырой raw-образ
+        # Конвертируем образ
         simg2img donor_files/system.img system.raw.img
-        rm -rf donor_files # Освобождаем место от старой папки
+        rm -rf donor_files
 
     - name: Extract System Image Files
       run: |
         git clone https://github.com
         python3 imgextractor/imgextractor.py system.raw.img output_folder
-        rm system.raw.img # Удаляем тяжелый исходник после распаковки
+        rm system.raw.img
 
     - name: Inject OS•DEMYAN DNA
       run: |
-        # Прописываем имя нашей системы в настройки смартфона
+        # Прописываем имя системы в настройки
         sed -i 's/ro.build.display.id=.*/ro.build.display.id=OS•DEMYAN v1.0/g' output_folder/system/build.prop
         
-        # Активируем системный эффект размытия Liquid Glass (Blur)
+        # Активируем эффект матового стекла Liquid Glass (Blur)
         echo "ro.surface_flinger.supports_background_blur=1" >> output_folder/system/build.prop
         echo "ro.sf.blurs_are_expensive=0" >> output_folder/system/build.prop
         
-        # Интегрируем фирменные системные APK (лаунчер)
+        # Интеграция лаунчера, если он будет загружен
         if [ -f "DemyanLauncher.apk" ]; then
           mkdir -p output_folder/system/priv-app/DemyanLauncher
           cp DemyanLauncher.apk output_folder/system/priv-app/DemyanLauncher/
         fi
         
-        # Интегрируем загрузочную анимацию
+        # Интеграция анимации загрузки, если она будет загружена
         if [ -f "bootanimation.zip" ]; then
           cp bootanimation.zip output_folder/system/media/
         fi
 
     - name: Pack OS•DEMYAN GSI
       run: |
-        # Собираем файлы обратно в ext4 образ размером 3.5 ГБ
+        # Упаковываем файлы обратно в систему ext4
         mke2fs -t ext4 -b 4096 -I 256 -O ^has_journal -M /system -d output_folder system_modified.raw.img
-        # Сжимаем образ в понятный для Fastboot формат Android GSI
+        # Финальное сжатие в формат GSI
         img2simg system_modified.raw.img system_os_demyan.img
 
     - name: Upload Finished GSI Image
